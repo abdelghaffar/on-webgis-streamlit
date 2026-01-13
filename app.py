@@ -1,61 +1,40 @@
 import streamlit as st
-import leafmap.foliumap as leafmap  # Backend principal compatible Streamlit
-import leafmap.colormaps as cm
-import leafmap.legends as legends
-import pandas as pd
+import leafmap.foliumap as leafmap
 
-st.set_page_config(page_title="Multi-Module WebGIS", layout="wide")
+st.set_page_config(page_title="Expert WebGIS", layout="wide")
 
-st.title("🛠️ WebGIS Full-Stack avec Leafmap")
+# --- INTERFACE ---
+st.sidebar.title("Configuration")
+opacite = st.sidebar.slider("Opacité du Cadastre", 0.0, 1.0, 0.6)
 
-# --- BARRE LATÉRALE : SÉLECTION DES MODULES ---
-st.sidebar.title("Modules & Outils")
+tab1, tab2 = st.tabs(["🗺️ Carte interactive", "📚 Informations"])
 
-# 1. Module : Basemaps & Backends
-backend = st.sidebar.selectbox(
-    "Choisir le Backend (Moteur)", 
-    ["folium", "kepler", "plotly", "pydeck"]
-)
+with tab1:
+    # 1. Initialisation
+    m = leafmap.Map(center=[48.8566, 2.3522], zoom=16)
 
-# 2. Module : OSM (Recherche de données)
-st.sidebar.subheader("🌍 Données OpenStreetMap")
-place_query = st.sidebar.text_input("Rechercher un lieu (ex: Paris, France)", "")
+    # 2. Ajout du fond Satellite (Google)
+    m.add_tile_layer(
+        url="https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+        name="Satellite",
+        attribution="Google"
+    )
 
-# 3. Module : Colormaps & Legends
-st.sidebar.subheader("🎨 Visualisation")
-color_palette = st.sidebar.selectbox("Palette de couleurs (Colormaps)", cm.list_colormaps())
-
-# --- INTERFACE PRINCIPALE (ONGLETS) ---
-tab_map, tab_tools, tab_settings = st.tabs(["🗺️ Carte", "🛠️ Outils SIG", "⚙️ Fond & Opacité"])
-
-with tab_settings:
-    st.subheader("Réglages des couches")
-    opacite = st.slider("Opacité globale", 0.0, 1.0, 0.7)
-
-with tab_map:
-    # Initialisation selon le backend choisi
-    if backend == "folium":
-        m = leafmap.Map(center=[48.8566, 2.3522], zoom=12)
-        
-        # Ajout du fond Cadastre IGN via module WMS/XYZ
-        url_cadastre = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=CADASTRALPARCELS.PARCELLAIRE_EXPRESS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
-        m.add_tile_layer(url_cadastre, name="Cadastre (IGN)", opacity=opacite)
-        
-        # Ajout d'une légende via le module legends
-        m.add_legend(title="Légende", builtin_legend='NLCD')
-        
-        # Affichage
-        m.to_streamlit(height=700)
+    # 3. Correction de l'erreur : Ajout du Cadastre IGN
+    # On utilise explicitement le mot-clé 'opacity' dans add_tile_layer
+    url_cadastre = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=CADASTRALPARCELS.PARCELLAIRE_EXPRESS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
     
-    elif backend == "kepler":
-        st.info("Utilisation du module Kepler.gl pour les données massives.")
-        m = leafmap.Map(backend="kepler")
-        m.to_streamlit(height=700)
+    try:
+        m.add_tile_layer(
+            url=url_cadastre, 
+            name="Cadastre (IGN)", 
+            attribution="IGN-F/Géoplateforme",
+            opacity=opacite,
+            shown=True
+        )
+    except Exception as e:
+        st.error(f"Erreur lors de l'ajout de la couche : {e}")
 
-with tab_tools:
-    st.subheader("Analyse de données")
-    # Simulation du module OSM pour télécharger des données
-    if place_query:
-        st.write(f"Extraction des données OSM pour : {place_query}")
-        # En production : gdf = leafmap.osm_gdf_from_place(place_query, tags={"amenity": "restaurant"})
-        st.info("Module 'osm' prêt pour l'extraction vectorielle.")
+    # 4. Affichage
+    m.add_layer_control()
+    m.to_streamlit(height=700)
