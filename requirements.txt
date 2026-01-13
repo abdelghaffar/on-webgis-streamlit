@@ -4,3 +4,4 @@ geopandas
 pandas
 osmnx
 folium
+streamlit_folium
