@@ -1,83 +1,40 @@
 import streamlit as st
-import geopandas as gpd
 import leafmap.foliumap as leafmap
-import pandas as pd
 
-# 1. CONFIGURATION DE LA PAGE
-st.set_page_config(page_title="Mon WebGIS Professionnel", layout="wide")
+st.set_page_config(page_title="WebGIS Cadastre", layout="wide")
 
-st.title("🌍 Application WebGIS Complète")
-st.markdown("""
-Cette application permet d'analyser des données spatiales, de calculer des zones d'influence 
-et de planifier des itinéraires sur des fonds de carte haute résolution.
-""")
+st.title("🗺️ WebGIS avec Cadastre IGN")
 
-# --- BARRE LATÉRALE (SIDEBAR) ---
-st.sidebar.header("🛠️ Outils & Données")
+# --- ONGLETS ---
+tab1, tab2 = st.tabs(["🗺️ Carte", "🖼️ Fond de carte"])
 
-# Section 1 : Fond de carte
-map_type = st.sidebar.selectbox(
-    "Choisir le fond de carte",
-    ["OpenStreetMap", "ROADMAP", "SATELLITE", "TERRAIN", "HYBRID"]
-)
+with tab2:
+    st.subheader("Options de fond")
+    choix_fond = st.selectbox(
+        "Choisir la couche :", 
+        ["OpenStreetMap", "Satellite (Google)", "Plan Cadastral (IGN)", "Parcelles (IGN)"]
+    )
 
-# Section 2 : Importation de données
-st.sidebar.markdown("---")
-uploaded_file = st.sidebar.file_uploader("Charger GeoJSON ou CSV (lat/lon)", type=['geojson', 'csv'])
+with tab1:
+    # Initialisation de la carte
+    m = leafmap.Map(center=[48.8566, 2.3522], zoom=15)
 
-# Section 3 : Analyse Spatiale
-st.sidebar.markdown("---")
-st.sidebar.subheader("Analyse de Zone")
-buffer_dist = st.sidebar.slider("Rayon du Buffer (mètres)", 0, 5000, 1000)
-
-# Section 4 : Itinéraire
-st.sidebar.markdown("---")
-st.sidebar.subheader("Calcul d'itinéraire")
-start = st.sidebar.text_input("Point de départ", "")
-end = st.sidebar.text_input("Destination", "")
-btn_route = st.sidebar.button("Tracer le trajet")
-
-# --- LOGIQUE DE LA CARTE ---
-
-# Initialisation de l'objet carte
-m = leafmap.Map(center=[46.603354, 1.888334], zoom=5) # Centré sur la France
-m.add_basemap(map_type)
-
-# Traitement des données importées
-if uploaded_file is not None:
-    if uploaded_file.name.endswith('.csv'):
-        df = pd.read_csv(uploaded_file)
-        # On suppose que le CSV a des colonnes 'latitude' et 'longitude'
-        gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df.longitude, df.latitude), crs="EPSG:4326")
-    else:
-        gdf = gpd.read_file(uploaded_file)
-
-    # Création du Buffer (Conversion en mètres EPSG:3857 puis retour en 4326)
-    gdf_buffer = gdf.to_crs(epsg=3857).buffer(buffer_dist).to_crs(epsg=4326)
+    # Logique pour le fond de carte
+    if choix_fond == "OpenStreetMap":
+        m.add_basemap("OpenStreetMap")
     
-    # Ajout à la carte
-    m.add_gdf(gdf, layer_name="Mes Points", info_mode='on_click')
-    m.add_gdf(gpd.GeoDataFrame(geometry=gdf_buffer), layer_name="Zone Tampon", style={'color': 'red', 'fillOpacity': 0.2})
-    
-    st.sidebar.success(f"✅ {len(gdf)} entités chargées")
+    elif choix_fond == "Satellite (Google)":
+        m.add_basemap("SATELLITE")
 
-# Traitement de l'itinéraire
-if btn_route and start and end:
-    try:
-        m.add_route(start, end, route_type="drive", layer_name="Itinéraire")
-        st.sidebar.success("✅ Itinéraire trouvé !")
-    except:
-        st.sidebar.error("❌ Lieu non trouvé. Soyez plus précis.")
+    elif choix_fond == "Plan Cadastral (IGN)":
+        # Utilisation du flux WMTS officiel de l'IGN pour le Plan Cadastral
+        url_ign = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=CADASTRALPARCELS.PARCELLAIRE_EXPRESS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+        m.add_tile_layer(url=url_ign, name="Cadastre IGN", attribution="IGN-F/Géoplateforme")
 
-# --- AFFICHAGE FINAL ---
-col1, col2 = st.columns([4, 1])
+    elif choix_fond == "Parcelles (IGN)":
+        # Variante : seulement les bordures de parcelles (souvent utile en superposition)
+        url_parcelles = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=CADASTRALPARCELS.PARCELS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
+        m.add_tile_layer(url=url_parcelles, name="Parcelles", attribution="IGN-F/Géoplateforme")
 
-with col1:
     # Affichage de la carte
     m.to_streamlit(height=700)
-
-with col2:
-    st.info("💡 **Astuce** : Utilisez les outils de dessin à gauche de la carte pour mesurer des distances ou dessiner des polygones.")
-    if uploaded_file is not None:
-        st.write("Aperçu des données :")
-        st.dataframe(gdf.drop(columns='geometry').head(10))
