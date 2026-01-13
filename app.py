@@ -1,101 +1,62 @@
 import streamlit as st
-import leafmap.foliumap as leafmap
 import pandas as pd
-import os
+import plotly.express as px
+import folium
+from streamlit_folium import st_folium
 
 # Configuration de la page
-st.set_page_config(page_title="Leafmap WebGIS Demo", layout="wide")
+st.set_page_config(page_title="Dashboard Incendies", layout="wide")
 
-# CSS personnalisé pour améliorer l'interface
-st.markdown("""
-    <style>
-    .main {
-        background-color: #f5f5f5;
-    }
-    </style>
-    """, unsafe_allow_html=True)
+# --- CHARGEMENT DES DONNÉES ---
+@st.cache_data
+def load_data():
+    # Simulation de chargement - Remplacez par pd.read_csv("votre_fichier.csv")
+    df = pd.read_csv("data_incendies.csv", parse_dates=['date'])
+    df['année'] = df['date'].dt.year
+    df['mois'] = df['date'].dt.month
+    return df
 
-st.title("🌿 Leafmap Interactive WebGIS")
-st.markdown("Un clone de la plateforme de démonstration leafmap.org utilisant Streamlit.")
+try:
+    df = load_data()
+except:
+    st.error("Veuillez charger un fichier 'data_incendies.csv'")
+    st.stop()
 
-# --- BARRE LATÉRALE ---
-st.sidebar.title("Menu Principal")
-apps = [
-    "🏠 Accueil", 
-    "🗺️ Carte Interactive", 
-    "🌓 Comparaison (Split Map)", 
-    "🕒 Séries Temporelles",
-    "🌍 Données OpenStreetMap"
-]
-choice = st.sidebar.radio("Aller vers", apps)
+# --- BARRE LATÉRALE (FILTRES) ---
+st.sidebar.header("Filtres interactifs")
+regions = st.sidebar.multiselect("Sélectionnez les régions", options=df['region'].unique(), default=df['region'].unique())
+annee_range = st.sidebar.slider("Période", int(df['année'].min()), int(df['année'].max()), (2015, 2023))
 
-# --- MODULE 1 : CARTE INTERACTIVE ---
-if choice == "🗺️ Carte Interactive":
-    st.subheader("Visualisation et Couches")
-    
-    col1, col2 = st.columns([4, 1])
-    
-    with col2:
-        basemap = st.selectbox("Fond de carte", leafmap.basemaps.keys(), index=15)
-        opacity = st.slider("Opacité du Cadastre", 0.0, 1.0, 0.7)
-        show_cadastre = st.checkbox("Afficher le Cadastre IGN", value=True)
+# Filtrage du dataframe
+df_filtered = df[(df['region'].isin(regions)) & (df['année'].between(annee_range[0], annee_range[1]))]
 
-    with col1:
-        m = leafmap.Map(center=[48.8566, 2.3522], zoom=12)
-        m.add_basemap(basemap)
-        
-        if show_cadastre:
-            url_cadastre = "https://data.geopf.fr/wmts?SERVICE=WMTS&VERSION=1.0.0&REQUEST=GetTile&LAYER=CADASTRALPARCELS.PARCELLAIRE_EXPRESS&STYLE=normal&FORMAT=image/png&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}"
-            m.add_tile_layer(url_cadastre, name="Cadastre", opacity=opacity)
-        
-        m.add_layer_control()
-        m.to_streamlit(height=650)
+# --- ENTÊTE ET KPI ---
+st.title("🔥 Exploration des Incendies de Forêt")
 
-# --- MODULE 2 : SPLIT MAP ---
-elif choice == "🌓 Comparaison (Split Map)":
-    st.subheader("Comparateur de cartes côte à côte")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        left = st.selectbox("Carte de gauche", ["TERRAIN", "ROADMAP", "SATELLITE"])
-    with col2:
-        right = st.selectbox("Carte de droite", ["HYBRID", "OpenStreetMap", "Stamen.Toner"])
-    
-    m = leafmap.Map(center=[48.8566, 2.3522], zoom=13)
-    m.split_map(left_layer=left, right_layer=right)
-    m.to_streamlit(height=650)
+col1, col2, col3 = st.columns(3)
+col1.metric("Total Incendies", len(df_filtered))
+col2.metric("Surface Totale (Ha)", f"{df_filtered['surface'].sum():,.0f}")
+col3.metric("Surface Moyenne", f"{df_filtered['surface'].mean():.2f}")
 
-# --- MODULE 3 : SÉRIES TEMPORELLES ---
-elif choice == "🕒 Séries Temporelles":
-    st.subheader("Analyse du changement (Timelapse)")
-    st.info("Visualisation des données satellitaires historiques (Google Earth Engine).")
-    
-    m = leafmap.Map()
-    # Exemple de couche Landsat historique
-    m.add_basemap("HYBRID")
-    m.to_streamlit(height=600)
-    st.warning("Note: Pour un timelapse réel, une authentification Google Earth Engine est requise.")
+st.divider()
 
-# --- MODULE 4 : OPENSTREETMAP ---
-elif choice == "🌍 Données OpenStreetMap":
-    st.subheader("Extraction de données vectorielles")
-    city = st.text_input("Entrez une ville pour extraire les bâtiments :", "Paris, France")
-    
-    if st.button("Extraire les données"):
-        st.write(f"Recherche des bâtiments à {city}...")
-        m = leafmap.Map()
-        # Simulation d'affichage OSM
-        m.add_osm_from_place(city, tags={"building": True}, label="Bâtiments")
-        m.to_streamlit(height=600)
+# --- VISUALISATIONS ---
+col_left, col_right = st.columns(2)
 
-# --- ACCUEIL ---
-else:
-    st.write("Bienvenue dans votre portail WebGIS personnalisé.")
-    st.image("https://leafmap.org/assets/images/leafmap-logo.png", width=200)
-    st.markdown("""
-    ### Fonctionnalités incluses :
-    * **Moteur Folium** pour une compatibilité web totale.
-    * **Gestionnaire de couches** interactif.
-    * **Split-panel** pour l'analyse comparative.
-    * **Intégration Flux IGN** (Cadastre).
-    """)
+with col_left:
+    st.subheader("📈 Tendances Temporelles")
+    df_trend = df_filtered.groupby('année').size().reset_index(name='nombre')
+    fig_trend = px.line(df_trend, x='année', y='nombre', title="Nombre d'incendies par an")
+    st.plotly_chart(fig_trend, use_container_width=True)
+
+with col_right:
+    st.subheader("🗺️ Cartographie des Zones")
+    # Utilisation de Plotly pour une carte rapide ou Folium pour plus de détails
+    fig_map = px.scatter_mapbox(df_filtered, lat="latitude", lon="longitude", size="surface", 
+                                color="surface", color_continuous_scale=px.colors.sequential.YlOrRd,
+                                zoom=4, mapbox_style="carto-positron")
+    st.plotly_chart(fig_map, use_container_width=True)
+
+# --- EXPLORATION DES DONNÉES ---
+st.subheader("🔍 Données Brutes")
+st.dataframe(df_filtered, use_container_width=True)
