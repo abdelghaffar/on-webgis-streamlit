@@ -26,7 +26,7 @@ if uploaded_file is not None:
     st.success(f"Fichier '{uploaded_file.name}' chargé avec succès !")
     
     # Filtres interactifs
-    regions = st.sidebar.multiselect("Régions", options=df['region'].unique(), default=df['region'].unique())
+    regions = st.sidebar.multiselect("Département", options=df['region'].unique(), default=df['region'].unique())
     
     # Affichage des KPIs et Graphiques...
     # (Insérez ici la logique de filtrage et d'affichage vue précédemment)
