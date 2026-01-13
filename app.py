@@ -71,4 +71,12 @@ if uploaded_file:
 
         # Tableau
         st.subheader("📋 Liste des interventions")
-        st.dataframe(df_filtered[['Année', 'Département', 'Nom de la commune',
+        st.dataframe(df_filtered[['Année', 'Département', 'Nom de la commune', 'Surface (Ha)', 'Nature']])
+        
+    except Exception as e:
+        st.error(f"Erreur d'analyse : {e}")
+        # Affiche les colonnes réellement détectées pour déboguer
+        if 'df' in locals() or 'data' in locals():
+            st.write("Colonnes détectées dans votre fichier :", df.columns.tolist() if 'df' in locals() else data.columns.tolist())
+else:
+    st.info("Veuillez charger le fichier CSV.")
